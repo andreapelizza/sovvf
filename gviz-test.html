@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Test gviz — filtro anno / nominativo</title>
+<style>
+:root{
+  --bg:#0b0e13; --panel:#141922; --panel2:#1b212c; --bordo:#2a3241;
+  --testo:#dbe2ea; --smorzato:#7d8798; --oro:#ffd700; --ok:#4ade80; --ko:#f87171;
+  --mono:ui-monospace,"JetBrains Mono","SF Mono",Menlo,Consolas,monospace;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--testo);
+  font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:20px}
+.wrap{max-width:1100px;margin:0 auto}
+h1{font-size:17px;letter-spacing:.14em;text-transform:uppercase;font-weight:600;
+  margin:0 0 4px;color:var(--oro)}
+.sub{color:var(--smorzato);font-size:12.5px;margin:0 0 20px}
+fieldset{border:1px solid var(--bordo);border-radius:8px;background:var(--panel);
+  padding:14px 16px 16px;margin:0 0 16px}
+legend{font-size:11px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--smorzato);padding:0 6px}
+.griglia{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(180px,1fr))}
+label{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--smorzato);margin-bottom:5px}
+input,select,button{font-family:inherit;font-size:14px;width:100%;
+  background:var(--panel2);color:var(--testo);border:1px solid var(--bordo);
+  border-radius:6px;padding:8px 10px}
+input:focus,select:focus,button:focus-visible{outline:2px solid var(--oro);outline-offset:1px}
+select:disabled,input:disabled{opacity:.45}
+button{cursor:pointer;font-weight:600;letter-spacing:.05em}
+button.primario{background:var(--oro);color:#000;border-color:var(--oro)}
+button:disabled{cursor:wait}
+.riga-azioni{display:flex;gap:10px;align-items:flex-end;margin-top:12px;flex-wrap:wrap}
+.riga-azioni>*{flex:1 1 160px}
+.switch{display:flex;align-items:center;gap:8px;color:var(--smorzato);font-size:12.5px}
+.switch input{width:auto}
+/* console: l'elemento firma della pagina */
+.console{background:#080b10;border:1px solid var(--bordo);border-left:3px solid var(--oro);
+  border-radius:6px;padding:10px 12px;font-family:var(--mono);font-size:12.5px;
+  white-space:pre-wrap;word-break:break-word;color:#9fb0c4;min-height:52px;margin-top:12px}
+.console .tq{color:var(--oro)}
+.console .ko{color:var(--ko)}
+.metriche{display:flex;gap:18px;flex-wrap:wrap;margin-top:8px;
+  font-family:var(--mono);font-size:12px;color:var(--smorzato)}
+.metriche b{color:var(--ok);font-weight:600}
+table{width:100%;border-collapse:collapse;font-size:13px;margin-top:10px}
+th{text-align:left;font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;
+  color:var(--smorzato);border-bottom:1px solid var(--bordo);padding:7px 8px}
+td{padding:6px 8px;border-bottom:1px solid #1d2431}
+tbody tr:hover{background:var(--panel2)}
+.vuoto{color:var(--smorzato);font-style:italic;padding:14px 2px}
+.scroll{max-height:420px;overflow:auto}
+@media (max-width:600px){body{padding:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<h1>Test gviz — filtro anno / nominativo</h1>
+<p class="sub">Tendine popolate lato server con <code>group by</code>, ricerca nominativo in memoria.
+Attiva i dati di prova per vedere il flusso senza collegare un foglio.</p>
+
+<fieldset>
+  <legend>Sorgente</legend>
+  <div class="griglia">
+    <div style="grid-column:1/-1"><label for="id">Link del foglio (o solo l'ID)</label>
+      <input id="id" value="1WHGKaawomU_jMuO6FnwzYidou-fmpc0ndeE0aiEMYP4"
+             placeholder="https://docs.google.com/spreadsheets/d/.../edit#gid=0"></div>
+    <div><label for="gid">GID scheda <span id="gidAuto" style="color:var(--oro)"></span></label>
+      <input id="gid" value="84413100"></div>
+    <div><label for="colData">Colonna data</label><input id="colData" value="A" maxlength="2"></div>
+    <div><label for="colNome">Colonna nominativo</label><input id="colNome" value="B" maxlength="2"></div>
+    <div>
+      <label for="tipoData">Tipo colonna data</label>
+      <select id="tipoData">
+        <option value="data">Data vera → year(A)</option>
+        <option value="testo">Testo "2026-03-14" → starts with</option>
+        <option value="nessuna">Nessuna — ignora l'anno</option>
+      </select>
+    </div>
+    <div><label for="colonne">Colonne da mostrare</label><input id="colonne" value="*"></div>
+  </div>
+  <div class="riga-azioni">
+    <label class="switch"><input type="checkbox" id="demo"> Dati di prova (5000 righe locali)</label>
+    <label class="switch"><input type="checkbox" id="noCache"> Ignora la cache di Google</label>
+    <button class="primario" id="btnCarica">Prepara i filtri</button>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Filtri</legend>
+  <div class="griglia">
+    <div><label for="anno">Anno</label><select id="anno" disabled><option>—</option></select></div>
+    <div><label for="cerca">Cerca nominativo</label><input id="cerca" placeholder="digita per filtrare" disabled></div>
+    <div><label for="nome">Nominativo</label><select id="nome" disabled><option>—</option></select></div>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Query eseguita</legend>
+  <div class="console" id="console">In attesa. Premi «Carica anni».</div>
+  <div class="metriche">
+    <span>rete <b id="mRete">—</b></span>
+    <span>filtro in memoria <b id="mFiltro">—</b></span>
+    <span>righe <b id="mRighe">—</b></span>
+  </div>
+</fieldset>
+
+<fieldset>
+  <legend>Risultati</legend>
+  <div class="scroll" id="risultati"><div class="vuoto">Nessun dato caricato.</div></div>
+</fieldset>
+
+</div>
+
+<script>
+const $ = s => document.querySelector(s);
+const el = {
+  id:$('#id'), gid:$('#gid'), colData:$('#colData'), colNome:$('#colNome'),
+  tipoData:$('#tipoData'), colonne:$('#colonne'), demo:$('#demo'), noCache:$('#noCache'),
+  btn:$('#btnCarica'), anno:$('#anno'), cerca:$('#cerca'), nome:$('#nome'),
+  console:$('#console'), mRete:$('#mRete'), mFiltro:$('#mFiltro'), mRighe:$('#mRighe'),
+  risultati:$('#risultati')
+};
+
+let righeAnno = [];   // righe dell'anno selezionato, tenute in memoria
+let intestazioni = [];
+let nominativi = [];  // { valore, etichetta } per la tendina
+
+/* ---------- 1. chiamata gviz ---------- */
+async function gviz(query){
+  if (el.demo.checked) return demoGviz(query);
+
+  const id = estraiId(el.id.value), gid = el.gid.value.trim() || '0';
+  if (!id) throw new Error('Link non riconosciuto. Incolla l\'URL completo del foglio, oppure il solo ID.');
+
+  const url = `https://docs.google.com/spreadsheets/d/${id}/gviz/tq`
+    + `?tqx=out:json&gid=${encodeURIComponent(gid)}&headers=1`
+    + `&tq=${encodeURIComponent(query)}`
+    + (el.noCache.checked ? `&_=${Date.now()}` : '');
+
+  const t0 = performance.now();
+  let txt;
+  try { txt = await (await fetch(url)).text(); }
+  catch { throw new Error('Richiesta bloccata (rete o CORS). Ripiego: tqx=out:csv con PapaParse.'); }
+  const ms = performance.now() - t0;
+
+  if (txt.trimStart().startsWith('<'))
+    throw new Error('Google ha risposto con una pagina di login: il foglio non è condiviso con «chiunque abbia il link».');
+
+  const m = txt.match(/setResponse\(([\s\S]*?)\);?\s*$/);
+  if (!m) throw new Error('Risposta gviz non riconosciuta.');
+
+  const t = JSON.parse(m[1]);
+  if (t.status === 'error')
+    throw new Error(t.errors.map(e => e.detailed_message || e.message).join(' | '));
+
+  const cols = t.table.cols.map((c,i) => c.label || c.id || `col${i}`);
+  const rows = t.table.rows.map(r => r.c.map(cella => {
+    if (!cella || cella.v === null) return null;          // celle vuote: arrivano come null
+    if (typeof cella.v === 'string' && cella.v.startsWith('Date(')) {
+      const [y,mo,d,h=0,mi=0,s=0] = cella.v.slice(5,-1).split(',').map(Number);
+      return new Date(y,mo,d,h,mi,s);                     // mese 0-based
+    }
+    return cella.f ?? cella.v;                            // f = valore già formattato dal foglio
+  }));
+  return { cols, rows, ms, query, url };
+}
+
+/* ---------- 2. costruzione delle query ---------- */
+const A = () => (el.colData.value.trim().toUpperCase() || 'A');
+const B = () => (el.colNome.value.trim().toUpperCase() || 'B');
+
+const ANNI = ['2026','2025','2024'];   // lista fissa: nessuna query, nessuna attesa
+
+function qAnni(){ return ''; }         // non più usata: gli anni non si interrogano
+const filtroAnno = a => el.tipoData.value === 'data'
+  ? `year(${A()}) = ${a}`
+  : `${A()} starts with '${a}'`;
+
+const qRighe = a => {
+  const sel = `select ${el.colonne.value.trim()||'*'}`;
+  return el.tipoData.value === 'nessuna'
+    ? `${sel}`
+    : `${sel} where ${filtroAnno(a)} order by ${A()} desc`;
+};
+
+/* ---------- 3. flusso ---------- */
+el.btn.addEventListener('click', caricaAnni);
+
+async function caricaAnni(){
+  bloccaFiltri();
+  if (el.tipoData.value === 'nessuna'){
+    riempi(el.anno, [{valore:'*', etichetta:'Tutte le righe'}], 'Scegli');
+  } else {
+    riempi(el.anno, ANNI.map(a => ({valore:a, etichetta:a})), 'Scegli un anno');
+  }
+  el.anno.disabled = false;
+  el.anno.focus();
+  el.console.textContent = 'Anni pronti (lista fissa, nessuna query). Scegline uno per caricare i nominativi.';
+}
+
+el.anno.addEventListener('change', async () => {
+  const a = el.anno.value;
+  bloccaFiltri(); el.anno.disabled = false;
+  if (!a) return;
+  el.anno.disabled = true;
+  try{
+    const r = await gviz(qRighe(a));          // una sola chiamata: da qui in poi tutto in memoria
+    mostraConsole(r);
+    intestazioni = r.cols; righeAnno = r.rows;
+
+    const iNome = indiceColonna(B());
+    const conta = new Map();
+    righeAnno.forEach(x => {
+      const v = x[iNome]; if (v == null || v === '') return;
+      conta.set(String(v), (conta.get(String(v))||0)+1);
+    });
+    nominativi = [...conta].sort((p,q)=>p[0].localeCompare(q[0],'it'))
+      .map(([v,n]) => ({valore:v, etichetta:`${v} (${n})`}));
+
+    riempi(el.nome, nominativi, `Tutti — ${righeAnno.length} righe`);
+    el.nome.disabled = false; el.cerca.disabled = false; el.cerca.value = '';
+    disegna(righeAnno);
+  }catch(e){ errore(e); }
+  finally{ el.anno.disabled = false; }
+});
+
+// ricerca in memoria: nessuna chiamata di rete, si può agganciare a ogni tasto
+el.cerca.addEventListener('input', () => {
+  const q = el.cerca.value.toLowerCase().trim();
+  const t0 = performance.now();
+  const vis = q ? nominativi.filter(x => x.valore.toLowerCase().includes(q)) : nominativi;
+  riempi(el.nome, vis, `Tutti — ${righeAnno.length} righe`);
+  el.mFiltro.textContent = (performance.now()-t0).toFixed(1)+' ms';
+});
+
+el.nome.addEventListener('change', () => {
+  const v = el.nome.value, i = indiceColonna(B());
+  const t0 = performance.now();
+  const out = v ? righeAnno.filter(r => String(r[i]) === v) : righeAnno;
+  el.mFiltro.textContent = (performance.now()-t0).toFixed(1)+' ms';
+  disegna(out);
+});
+
+/* ---------- 4. utilità ---------- */
+// accetta l'URL completo, il link "condividi", o il solo ID
+function estraiId(v){
+  v = String(v).trim();
+  const m = v.match(/\/spreadsheets\/d\/(?:e\/)?([a-zA-Z0-9-_]{20,})/);
+  if (m) return m[1];
+  return /^[a-zA-Z0-9-_]{20,}$/.test(v) ? v : '';
+}
+function estraiGid(v){
+  const m = String(v).match(/[#&?]gid=(\d+)/);
+  return m ? m[1] : null;
+}
+// all'incolla: ricavo il gid e ripulisco il campo lasciando il solo ID
+el.id.addEventListener('input', () => {
+  const g = estraiGid(el.id.value);
+  if (g){ el.gid.value = g; document.getElementById('gidAuto').textContent = '· letto dal link'; }
+  const id = estraiId(el.id.value);
+  if (id && id !== el.id.value.trim()) el.id.value = id;
+});
+
+const indiceColonna = L => L.toUpperCase().split('')
+  .reduce((n,c) => n*26 + (c.charCodeAt(0)-64), 0) - 1;
+
+function riempi(sel, voci, primaVoce){
+  sel.innerHTML = '';
+  sel.appendChild(new Option(primaVoce, ''));
+  voci.forEach(v => sel.appendChild(new Option(v.etichetta, v.valore)));
+}
+function bloccaFiltri(){
+  [el.anno, el.nome, el.cerca].forEach(x => x.disabled = true);
+  riempi(el.nome, [], '—');
+}
+function mostraConsole(r){
+  el.console.innerHTML = `tq  <span class="tq">${escapeHtml(r.query)}</span>\n`
+    + `→   ${r.rows.length} righe · ${r.cols.length} colonne`;
+  el.mRete.textContent = r.ms.toFixed(0)+' ms';
+  el.mRighe.textContent = r.rows.length;
+  el.mFiltro.textContent = '—';
+}
+function disegna(righe){
+  el.mRighe.textContent = righe.length;
+  if (!righe.length) return el.risultati.innerHTML = '<div class="vuoto">Nessuna riga per questo filtro.</div>';
+  const capo = intestazioni.map(c => `<th>${escapeHtml(c)}</th>`).join('');
+  const corpo = righe.slice(0,300).map(r =>
+    '<tr>'+r.map(c => `<td>${escapeHtml(fmt(c))}</td>`).join('')+'</tr>').join('');
+  el.risultati.innerHTML = `<table><thead><tr>${capo}</tr></thead><tbody>${corpo}</tbody></table>`
+    + (righe.length>300 ? `<div class="vuoto">Mostrate le prime 300 di ${righe.length}.</div>` : '');
+}
+const fmt = c => c == null ? '' :
+  (c instanceof Date
+    ? c.toLocaleString('it-IT',{day:'2-digit',month:'2-digit',year:'numeric',
+                               hour:'2-digit',minute:'2-digit'})
+    : String(c));
+const escapeHtml = s => String(s).replace(/[&<>]/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[m]));
+function errore(e){
+  el.console.innerHTML = `<span class="ko">${escapeHtml(e.message)}</span>`;
+  el.mRete.textContent = el.mFiltro.textContent = el.mRighe.textContent = '—';
+}
+function svuota(msg){ el.console.innerHTML = `<span class="ko">${escapeHtml(msg)}</span>`; }
+
+/* ---------- 5. dati di prova ---------- */
+let DEMO = null;
+function costruisciDemo(){
+  const cognomi = ['ROSSI','BIANCHI','FERRARI','ESPOSITO','ROMANO','COLOMBO','RICCI','MARINO',
+    'GRECO','BRUNO','GALLO','CONTI','DE LUCA','COSTA','GIORDANO','MANCINI','RIZZO','LOMBARDI'];
+  const nomi = ['MARIO','LUCA','ANNA','PAOLO','GIULIA','MARCO','SARA','ANDREA','ELENA','DAVIDE'];
+  const tipi = ['INCENDIO','SOCCORSO PERSONA','DISSESTO STATICO','APERTURA PORTA',
+    'INCIDENTE STRADALE','DANNI ACQUA','FUGA GAS','RECUPERO ANIMALE'];
+  const sedi = ['SPOLETO','PERUGIA','FOLIGNO','TERNI','ORVIETO','GUBBIO'];
+  const out = [];
+  for (let i=0;i<5000;i++){
+    const d = new Date(2021 + Math.floor(Math.random()*6),
+      Math.floor(Math.random()*12), 1+Math.floor(Math.random()*28));
+    out.push([d,
+      `${cognomi[i%cognomi.length]} ${nomi[(i*7)%nomi.length]}`,
+      tipi[(i*3)%tipi.length], sedi[(i*5)%sedi.length], 1000+i]);
+  }
+  return { cols:['Data','Nominativo','Tipologia','Sede','Progressivo'], rows:out };
+}
+async function demoGviz(query){
+  if (!DEMO) DEMO = costruisciDemo();
+  const t0 = performance.now();
+  await new Promise(r => setTimeout(r, 250+Math.random()*250));   // latenza simulata
+  const anno = (query.match(/=\s*(\d{4})/) || query.match(/'(\d{4})/) || [])[1];
+  let rows;
+  if (/group by/.test(query)){
+    const m = new Map();
+    DEMO.rows.forEach(r => { const a = r[0].getFullYear();
+      m.set(a,(m.get(a)||0)+1); });
+    rows = [...m].sort((p,q)=>q[0]-p[0]).map(([a,n])=>[a,n]);
+    return { cols:['anno','conteggio'], rows, ms:performance.now()-t0, query };
+  }
+  rows = DEMO.rows.filter(r => !anno || r[0].getFullYear() == anno)
+                  .sort((a,b)=>b[0]-a[0]);
+  return { cols:DEMO.cols, rows, ms:performance.now()-t0, query };
+}
+el.demo.addEventListener('change', () => {
+  const on = el.demo.checked;
+  [el.id, el.gid, el.colData, el.colNome, el.tipoData, el.colonne].forEach(x => x.disabled = on);
+  bloccaFiltri();
+  el.console.textContent = on
+    ? 'Dati di prova attivi: 5000 righe generate in locale, latenza di rete simulata.'
+    : 'Foglio precaricato. Premi «Prepara i filtri».';
+});
+el.demo.dispatchEvent(new Event('change'));
+</script>
+</body>
+</html>
